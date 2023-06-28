@@ -2,11 +2,33 @@ require('dotenv').config();
 
 var createError = require('http-errors');
 var express = require('express');
+var passport = require('passport')
+var LocalStorage = require('passport-local')
+
+passport.use(new LocalStrategy(function verify(username, password, cb) {
+  db.get('SELECT * FROM users WHERE username = ?', [ username ], function(err, row) {
+    if (err) { return cb(err); }
+    if (!row) { return cb(null, false, { message: 'Incorrect username or password.' }); }
+
+    crypto.pbkdf2(password, row.salt, 310000, 32, 'sha256', function(err, hashedPassword) {
+      if (err) { return cb(err); }
+      if (!crypto.timingSafeEqual(row.hashed_password, hashedPassword)) {
+        return cb(null, false, { message: 'Incorrect username or password.' });
+      }
+      return cb(null, row);
+    });
+  });
+}));
+
+var crypto = require('crypto')
+var db = require('../db')
+
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 
 var indexRouter = require('./routes/index');
+var authRouter = require('./routes/auth');
 
 var app = express();
 
@@ -23,6 +45,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', indexRouter);
+app.use('/', authRouter)
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
